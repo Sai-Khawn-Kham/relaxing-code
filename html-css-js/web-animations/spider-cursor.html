@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Spider Cursor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            overflow: hidden;
+            height: 100vh;
+            cursor: none; /* Hides the default cursor */
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="spiderCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('spiderCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize canvas to fit window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Mouse coordinates tracking
+        const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // Spider properties
+        const spider = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 12,
+            headRadius: 6,
+            speed: 0.08, // Physics easing speed (0.01 to 1)
+            angle: 0
+        };
+
+        // Animation loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Smoothly ease spider position toward mouse
+            spider.x += (mouse.x - spider.x) * spider.speed;
+            spider.y += (mouse.y - spider.y) * spider.speed;
+
+            // 2. Calculate movement angle to rotate body and legs
+            const dx = mouse.x - spider.x;
+            const dy = mouse.y - spider.y;
+            // Only update angle if moving to avoid flickering
+            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                spider.angle = Math.atan2(dy, dx);
+            }
+
+            // 3. Draw the silk web thread hanging from top ceiling
+            ctx.beginPath();
+            ctx.moveTo(spider.x, 0);
+            ctx.lineTo(spider.x, spider.y);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Save context state for rotation
+            ctx.save();
+            ctx.translate(spider.x, spider.y);
+            ctx.rotate(spider.angle + Math.PI / 2); // Orient forward
+
+            // 4. Draw Spider Legs (Dynamic organic movement using time)
+            const time = Date.now() * 0.01;
+            ctx.strokeStyle = '#2c2c2c';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Left and right side joint offsets
+            const legSides = [-1, 1]; 
+            // 4 pairs of legs
+            for (let i = 0; i < 4; i++) {
+                legSides.forEach(side => {
+                    ctx.beginPath();
+                    // Origin point on body
+                    ctx.moveTo(side * (spider.radius * 0.5), i * 3 - 5);
+                    
+                    // Joint animation calculation
+                    const wave = Math.sin(time + (i * 1.5)) * 4;
+                    const jointX = side * (spider.radius * 2 + (i * 2));
+                    const jointY = -15 + (i * 12) + wave;
+                    
+                    // Tip of the leg
+                    const tipX = side * (spider.radius * 3.5 + (i * 3));
+                    const tipY = -20 + (i * 15) + (wave * 1.5);
+
+                    ctx.quadraticCurveTo(jointX, jointY, tipX, tipY);
+                    ctx.stroke();
+                });
+            }
+
+            // 5. Draw Spider Body (Abdomen)
+            ctx.beginPath();
+            ctx.arc(0, 5, spider.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+
+            // 6. Draw Spider Head (Cephalothorax)
+            ctx.beginPath();
+            ctx.arc(0, -spider.radius + 3, spider.headRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#262626';
+            ctx.fill();
+            ctx.stroke();
+
+            // 7. Draw Glowing Red Eyes
+            ctx.fillStyle = '#ff003c';
+            // Left eye
+            ctx.beginPath();
+            ctx.arc(-2, -spider.radius - 1, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            // Right eye
+            ctx.beginPath();
+            ctx.arc(2, -spider.radius - 1, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

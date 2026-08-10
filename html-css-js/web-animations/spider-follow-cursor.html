@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hover-Triggered Spider Animation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0f172a;
+            font-family: system-ui, -apple-system, sans-serif;
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            /* Keep default cursor visible everywhere */
+            cursor: default;
+        }
+
+        /* Fullscreen canvas overlay for the spider */
+        #spiderCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none; /* Allows user to click elements underneath */
+            z-index: 9999;
+        }
+
+        /* Example Hover Target Card */
+        .spider-target {
+            width: 320px;
+            padding: 2.5rem 2rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            transition: border-color 0.2s, transform 0.2s;
+            /* Explicitly show interactive pointer cursor */
+            cursor: pointer;
+        }
+
+        .spider-target:hover {
+            border-color: #ef4444;
+            transform: translateY(-2px);
+        }
+
+        .spider-target h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.25rem;
+            color: #f1f5f9;
+        }
+
+        .spider-target p {
+            margin: 0;
+            font-size: 0.875rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Target Element -->
+    <div class="spider-target" id="spiderArea">
+        <h2>Hover Over Me</h2>
+        <p>Move your mouse over this card to summon the spider. Move away and it retreats.</p>
+    </div>
+
+    <!-- Canvas Overlay -->
+    <canvas id="spiderCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('spiderCanvas');
+        const ctx = canvas.getContext('2d');
+        const targetElement = document.getElementById('spiderArea');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Target coordinates and hover state tracking
+        const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+        let isHovering = false;
+
+        targetElement.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        targetElement.addEventListener('mouseenter', (e) => {
+            isHovering = true;
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        targetElement.addEventListener('mouseleave', () => {
+            isHovering = false;
+        });
+
+        // 2-Joint Inverse Kinematics solver
+        function solveIK(originX, originY, targetX, targetY, l1, l2, flip = 1) {
+            const dx = targetX - originX;
+            const dy = targetY - originY;
+            const dist = Math.hypot(dx, dy);
+            const d = Math.min(dist, l1 + l2 - 0.1);
+
+            const angleToTarget = Math.atan2(dy, dx);
+            const cosAngle1 = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d);
+            const angle1 = Math.acos(Math.max(-1, Math.min(1, cosAngle1)));
+
+            const jointX = originX + Math.cos(angleToTarget + angle1 * flip) * l1;
+            const jointY = originY + Math.sin(angleToTarget + angle1 * flip) * l1;
+
+            return { jointX, jointY };
+        }
+
+        class Spider {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 12;
+                this.angle = 0;
+                this.speed = 0.08;
+                this.scale = 0; // Controlled for smooth fade/pop appearance
+
+                this.legs = [];
+                const legAngles = [-0.9, -0.3, 0.3, 0.9];
+                const legLengths = [40, 45, 45, 40];
+
+                for (let i = 0; i < 4; i++) {
+                    for (let side of [-1, 1]) {
+                        this.legs.push({
+                            side: side,
+                            angleOffset: legAngles[i] * side,
+                            restLength: legLengths[i],
+                            footX: x,
+                            footY: y,
+                            targetX: x,
+                            targetY: y,
+                            stepProgress: 1,
+                            startX: x,
+                            startY: y,
+                            stepThreshold: 35 + i * 2,
+                            l1: 18,
+                            l2: 25
+                        });
+                    }
+                }
+            }
+
+            update() {
+                // Smooth scale-in/out based on hover state
+                const targetScale = isHovering ? 1 : 0;
+                this.scale += (targetScale - this.scale) * 0.1;
+
+                if (this.scale < 0.01) return; // Skip updating when hidden
+
+                // Ease movement toward target point
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                this.x += dx * this.speed;
+                this.y += dy * this.speed;
+
+                if (Math.hypot(dx, dy) > 1) {
+                    this.angle = Math.atan2(dy, dx);
+                }
+
+                // Leg stepping logic
+                this.legs.forEach((leg) => {
+                    const worldAngle = this.angle + leg.angleOffset;
+                    const idealX = this.x + Math.cos(worldAngle) * leg.restLength;
+                    const idealY = this.y + Math.sin(worldAngle) * leg.restLength;
+
+                    if (Math.hypot(idealX - leg.footX, idealY - leg.footY) > leg.stepThreshold && leg.stepProgress >= 1) {
+                        leg.startX = leg.footX;
+                        leg.startY = leg.footY;
+                        leg.targetX = idealX + dx * 0.2;
+                        leg.targetY = idealY + dy * 0.2;
+                        leg.stepProgress = 0;
+                    }
+
+                    if (leg.stepProgress < 1) {
+                        leg.stepProgress += 0.14;
+                        const t = Math.min(1, leg.stepProgress);
+                        leg.footX = leg.startX + (leg.targetX - leg.startX) * t;
+                        leg.footY = leg.startY + (leg.targetY - leg.startY) * t;
+                    }
+                });
+            }
+
+            draw() {
+                if (this.scale < 0.01) return;
+
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, this.scale);
+
+                // 1. Silk Thread hanging from top edge
+                ctx.beginPath();
+                ctx.moveTo(this.x, 0);
+                ctx.lineTo(this.x, this.y);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // 2. Legs with IK
+                this.legs.forEach((leg) => {
+                    const originX = this.x + Math.cos(this.angle) * (this.radius * 0.4);
+                    const originY = this.y + Math.sin(this.angle) * (this.radius * 0.4);
+                    const lift = Math.sin(leg.stepProgress * Math.PI) * 5;
+
+                    const ik = solveIK(
+                        originX, originY,
+                        leg.footX, leg.footY - lift,
+                        leg.l1 * this.scale, leg.l2 * this.scale,
+                        leg.side
+                    );
+
+                    ctx.beginPath();
+                    ctx.moveTo(originX, originY);
+                    ctx.lineTo(ik.jointX, ik.jointY);
+                    ctx.lineTo(leg.footX, leg.footY - lift);
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                });
+
+                // 3. Spider Body & Head
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle + Math.PI / 2);
+                ctx.scale(this.scale, this.scale);
+
+                // Abdomen
+                ctx.beginPath();
+                ctx.arc(0, 5, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#1e293b';
+                ctx.fill();
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(0, -this.radius + 2, this.radius * 0.55, 0, Math.PI * 2);
+                ctx.fillStyle = '#0f172a';
+                ctx.fill();
+
+                // Glowing Eyes
+                ctx.fillStyle = '#ef4444';
+                [-2, 2].forEach(xOffset => {
+                    ctx.beginPath();
+                    ctx.arc(xOffset, -this.radius - 2, 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                ctx.restore();
+                ctx.restore();
+            }
+        }
+
+        const spider = new Spider(canvas.width / 2, canvas.height / 2);
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            spider.update();
+            spider.draw();
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
