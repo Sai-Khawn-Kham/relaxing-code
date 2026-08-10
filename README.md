@@ -27,25 +27,7 @@ The project is organized by language, with subdirectories for specific topics or
 
 ```text
 relaxing-code/
+├── html-css-js/
+│   ├── web-animations/
 └── README.md
 ```
-
-<!-- ```text
-relaxing-code/
-├── python/
-│   ├── basics/
-│   ├── data_structures/
-│   └── micro_projects/
-├── typescript/
-│   ├── design_patterns/
-│   └── async_playground/
-├── go/
-│   ├── routines_and_channels/
-│   └── web_server_basics/
-├── rust/
-│   ├── ownership_borrowing/
-│   └── cli_tool/
-├── php/
-│   └── OOP_concepts/
-└── README.md
-``` -->
